@@ -1,0 +1,85 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import pickle
+
+# -------------------------------
+# Load saved models & objects
+# -------------------------------
+price_model = pickle.load(open("price_model.pkl", "rb"))
+cluster_model = pickle.load(open("cluster_model.pkl", "rb"))
+scaler = pickle.load(open("scaler.pkl", "rb"))
+encoder = pickle.load(open("encoder.pkl", "rb"))
+cluster_name_map = pickle.load(open("cluster_name_map.pkl", "rb"))
+
+st.set_page_config(page_title="💎 Diamond Dynamics", layout="centered")
+
+st.title("💎 Diamond Dynamics: Price & Market Segment Predictor")
+
+st.markdown("""
+This app predicts:
+- 🔹 Diamond **Price (INR)**
+- 🔹 Diamond **Market Segment (Cluster)**  
+based on physical and quality attributes.
+""")
+
+# -------------------------------
+# User Inputs
+# -------------------------------
+st.header("🔢 Enter Diamond Details")
+
+carat = st.number_input("Carat", min_value=0.1, max_value=5.0, value=0.7, step=0.01)
+
+cut = st.selectbox("Cut", ["Fair", "Good", "Very Good", "Premium", "Ideal"])
+color = st.selectbox("Color", ["D", "E", "F", "G", "H", "I", "J"])
+clarity = st.selectbox("Clarity", ["IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "I1"])
+
+x = st.number_input("Length (x in mm)", min_value=1.0, max_value=15.0, value=5.5)
+y = st.number_input("Width (y in mm)", min_value=1.0, max_value=15.0, value=5.5)
+z = st.number_input("Depth (z in mm)", min_value=1.0, max_value=15.0, value=3.5)
+
+# -------------------------------
+# Feature Engineering (same as training)
+# -------------------------------
+volume = x * y * z
+price_per_carat_dummy = 0   # placeholder (not used at inference)
+dimension_ratio = (x + y) / (2 * z)
+
+input_df = pd.DataFrame({
+    "carat": [carat],
+    "cut": [cut],
+    "color": [color],
+    "clarity": [clarity],
+    "depth": [0],    # dummy (not used in UI)
+    "table": [0],    # dummy (not used in UI)
+    "x": [x],
+    "y": [y],
+    "z": [z],
+    "volume": [volume],
+    "price_per_carat": [price_per_carat_dummy],
+    "dimension_ratio": [dimension_ratio]
+})
+
+# Encode categorical columns
+input_df[["cut","color","clarity"]] = encoder.transform(
+    input_df[["cut","color","clarity"]]
+)
+
+# -------------------------------
+# Buttons
+# -------------------------------
+if st.button("🔮 Predict Price & Segment"):
+
+    # ---- Price Prediction ----
+    price_pred = price_model.predict(input_df)[0]
+
+    # ---- Clustering ----
+    scaled_input = scaler.transform(input_df)
+    cluster_pred = cluster_model.predict(scaled_input)[0]
+    cluster_name = cluster_name_map.get(cluster_pred, "Unknown Segment")
+
+    # -------------------------------
+    # Output
+    # -------------------------------
+    st.success(f"💰 Predicted Price: ₹ {price_pred:,.2f}")
+    st.info(f"📦 Market Segment: {cluster_name}")
